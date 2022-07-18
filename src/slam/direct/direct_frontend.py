@@ -12,7 +12,7 @@ class DirectFrontend(Frontend):
 
         self.feature_size = 8
         self.optical_flow_win_size = 21
-        self.optical_flow_pyr_levels = 5
+        self.optical_flow_pyr_levels = 3
 
     def init_initialization_frame(self, frame: Frame):
         super().init_initialization_frame(frame)
@@ -48,7 +48,11 @@ class DirectFrontend(Frontend):
         return (frame0.features[mask], features[mask])
 
     def locate_features(self, frame: Frame):
-        return cv2.goodFeaturesToTrack(frame.im, self.max_features, 0.01, self.optical_flow_win_size)
+        #return cv2.goodFeaturesToTrack(frame.im, self.max_features, 0.01, self.optical_flow_win_size)
+        h, w = frame.im.shape[:2]
+        points = (np.random.random((self.max_features, 2)) * (w, h)).round().astype(np.float32).reshape((-1, 1, 2))
+        return points
+
 
     def _lkr_win_size(self):
         return (self.optical_flow_win_size,)*2

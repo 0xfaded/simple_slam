@@ -26,7 +26,9 @@ class Frontend(object):
         self.initialization_max_landmark_dist = 100.0
 
     def init_frame(self, frame: Frame, image):
-        frame.im = cv2.GaussianBlur(image, (self.gaussian_blur_win_size,)*2, 1.0)
+        #frame.im = cv2.GaussianBlur(image, (self.gaussian_blur_win_size,)*2, 1.0)
+        frame.im = image
+        pass
 
     def init_initialization_frame(self, frame: Frame):
         pass
@@ -35,6 +37,15 @@ class Frontend(object):
     def solve_initial_transform(self, frame0: Frame, frame1: Frame):
 
         points0, points1 = self.initial_correspondences(frame0, frame1)
+
+        debug = cv2.cvtColor(frame1.im, cv2.COLOR_GRAY2RGB)
+
+        for pt0, pt1 in zip(points0, points1):
+            cv2.line(debug, pt0.astype(int), pt1.astype(int), (255, 0, 0))
+
+        cv2.imshow('lines', debug)
+        cv2.waitKey()
+
 
         essential_matrix, mask = cv2.findEssentialMat(points0, points1, self.camera.mat.mat, cv2.RANSAC)
 
@@ -47,8 +58,13 @@ class Frontend(object):
         points1 = points1[mask]
         triangulated_points = cv2.convertPointsFromHomogeneous(triangulated_points.T[mask]).reshape((-1,3))
 
-        print(triangulated_points.shape)
-        print(points0.shape)
+
+        for pt0, pt1 in zip(points0, points1):
+            cv2.line(debug, pt0.astype(int), pt1.astype(int), (0, 0, 255))
+
+        cv2.imshow('lines', debug)
+        cv2.waitKey()
+
 
         X = triangulated_points
         x0 = self.camera.mat.inverse() @ points0
@@ -56,22 +72,23 @@ class Frontend(object):
 
         transform = Pose(R, t)
 
-        print(R)
-        print(t)
-        #Y = X @ R.T + t.T
-        Y = transform @ X
-        print('t\n',t)
-        x1 = self.camera.mat.inverse() @ points1
-        y1 = cv2.convertPointsFromHomogeneous(Y).reshape((-1, 2))
+        # TODO[carl]: Move to test
+        #print(R)
+        #print(t)
+        ##Y = X @ R.T + t.T
+        #Y = transform @ X
+        #print('t\n',t)
+        #x1 = self.camera.mat.inverse() @ points1
+        #y1 = cv2.convertPointsFromHomogeneous(Y).reshape((-1, 2))
 
-        xy0 = x0 - y0
-        xy1 = x1 - y1
+        #xy0 = x0 - y0
+        #xy1 = x1 - y1
 
-        n = points0 - points1
-        print(n.T @ n)
+        #n = points0 - points1
+        #print(n.T @ n)
 
-        print('hi\n', xy0.T @ xy0)
-        print('ji\n', xy1.T @ xy1)
+        #print('hi\n', xy0.T @ xy0)
+        #print('ji\n', xy1.T @ xy1)
 
         success = num_inliers >= self.initialization_min_landmark_inliers
         return Frontend.InitializationResult(success, transform, points0, points1, triangulated_points)

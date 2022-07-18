@@ -1,7 +1,7 @@
 from enum import Enum
 
 from slam import Frame, Landmarks, Pose
-from slam import direct
+from slam import direct, binary
 
 import argparse
 
@@ -48,7 +48,9 @@ class System:
 
         self.frontend = direct.DirectFrontend({}, camera)
         self.direct_backend = direct.DirectBackend({}, self.frontend, self.landmarks)
-        #self.binary_frontend = BinaryFrontend()
+
+        self.binary_frontend = binary.BinaryFrontend({}, camera)
+        self.binary_backend = binary.BinaryBackend({}, self.binary_frontend, self.landmarks)
 
     def process_image(self, image):
 
@@ -66,6 +68,8 @@ class System:
 
     def initialize(self, frame: Frame):
 
+        direct = True
+
         if (self.state.frame0 is None) or (self.state.failed_initializations >= self.max_failed_initializations):
 
             self.frontend.init_initialization_frame(frame)
@@ -78,9 +82,10 @@ class System:
             frame1 = frame
 
             # compute landmark descriptors from frame0
-            print('points0')
-            print(result.points0[:5])
-            descriptors, mask = self.frontend.extract_descriptors_at(frame0, result.points0)
+            if direct:
+                descriptors, mask = self.frontend.extract_descriptors_at(frame0, result.points0)
+            else:
+                descriptors, mask = self.binary_frontend.extract_descriptors_at(frame0, result.points0)
 
             # only store fetures and landmarks which we successfully extracted features for
             self.landmarks.initialize(result.triangulated_points[mask], descriptors[mask])
@@ -102,14 +107,20 @@ class System:
                     dxf = (dx - 100) / 100
                     dyf = (dy - 100) / 100
 
-                    theta = 0.01 * dyf
+                    theta = 0.1 * dyf
                     dR = np.array([
                         [np.cos(theta), 0, -np.sin(theta)],
                         [0, 1, 0],
                         [np.sin(theta), 0, np.cos(theta)]], dtype=np.float32)
 
+                    #frame1.pose = Pose(pose.R, pose.t + (dxf, dyf, 0))
                     frame1.pose = Pose(dR @ pose.R, pose.t + (dxf, 0, 0))
-                    print(dxf, theta, self.direct_backend.evaluate(frame1))
+                    if direct:
+                        score = self.direct_backend.evaluate(frame1)
+                    else:
+                        score = self.binary_backend.evaluate(frame1)
+
+                    print(dxf, theta, score)
 
         else:
 
