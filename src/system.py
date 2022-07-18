@@ -1,11 +1,12 @@
 from enum import Enum
 
-from slam import Frame
+from slam import Frame, Landmarks, Pose
 from slam import direct
 
 import argparse
 
 import cv2
+import numpy as np
 
 class TrackingState(Enum):
     INITIALIZING = 0
@@ -43,8 +44,10 @@ class System:
         self.max_failed_initializations = 5
 
         self.state = System.State()
+        self.landmarks = Landmarks()
 
         self.frontend = direct.DirectFrontend({}, camera)
+        self.direct_backend = direct.DirectBackend({}, self.frontend, self.landmarks)
         #self.binary_frontend = BinaryFrontend()
 
     def process_image(self, image):
@@ -74,16 +77,39 @@ class System:
             frame0 = self.state.frame0
             frame1 = frame
 
-            #frame0.features = self.frontend.extract_features_at(frame, result.points0)
-            frame0.observations = result.obs0
+            # compute landmark descriptors from frame0
+            print('points0')
+            print(result.points0[:5])
+            descriptors, mask = self.frontend.extract_descriptors_at(frame0, result.points0)
 
-            #frame1.features = self.frontend.extract_features_at(frame, result.points1)
-            frame1.observations = self.obs1
+            # only store fetures and landmarks which we successfully extracted features for
+            self.landmarks.initialize(result.triangulated_points[mask], descriptors[mask])
+
+            frame0.features = result.points0[mask]
+            frame0.observations = np.arange(len(self.landmarks))
+
+            frame1.features = result.points1[mask]
+            frame1.observations = np.arange(len(self.landmarks))
+            frame1.pose = result.transform
 
             #self.motion_model.initialize(result.transform, n_frames=self.state.failed_initializations + 1)
-            #self.landmarks.initialize(result.transform)
 
             self.state.track_state = TrackingState.TRACKING
+
+            pose = frame1.pose.copy()
+            for dx in range(200):
+                for dy in range(200):
+                    dxf = (dx - 100) / 100
+                    dyf = (dy - 100) / 100
+
+                    theta = 0.01 * dyf
+                    dR = np.array([
+                        [np.cos(theta), 0, -np.sin(theta)],
+                        [0, 1, 0],
+                        [np.sin(theta), 0, np.cos(theta)]], dtype=np.float32)
+
+                    frame1.pose = Pose(dR @ pose.R, pose.t + (dxf, 0, 0))
+                    print(dxf, theta, self.direct_backend.evaluate(frame1))
 
         else:
 
